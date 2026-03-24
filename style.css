@@ -808,6 +808,122 @@ body {
   color: var(--text-primary);
 }
 
+.enhancements-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tag-setting,
+.pattern-setting {
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+}
+
+.time-tag-controls {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.time-tag-controls .btn {
+  width: 100%;
+  font-size: 0.72rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.time-tag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 150px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 0.15rem;
+}
+
+.time-tag-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.25rem;
+}
+
+.time-tag-fill,
+.time-tag-delete {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  line-height: 1.1;
+  padding: 0.3rem 0.4rem;
+  cursor: pointer;
+}
+
+.time-tag-fill {
+  text-align: left;
+}
+
+.time-tag-fill:hover,
+.time-tag-delete:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.pattern-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 0.15rem;
+}
+
+.pattern-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.2rem 0;
+}
+
+.pattern-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.62rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.pattern-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.pattern-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.pattern-label {
+  font-size: 0.66rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pattern-empty {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
 /* === Grid === */
 .grid {
   flex: 1;
