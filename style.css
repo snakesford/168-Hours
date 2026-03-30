@@ -717,6 +717,37 @@ body {
   gap: 0.5rem;
 }
 
+.day-preset-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.05), rgba(255, 255, 255, 0.95));
+}
+
+.day-preset-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.day-preset-head .week-start-label {
+  min-width: 0;
+}
+
+.day-preset-note {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.day-preset-grid {
+  display: grid;
+  gap: 0.55rem;
+}
+
 .week-start-label {
   font-size: 0.75rem;
   color: var(--text-secondary);
@@ -954,6 +985,26 @@ body {
   letter-spacing: 0.03em;
   color: var(--text-secondary);
   padding: 0.5rem 0;
+}
+
+.day-labels > span {
+  position: relative;
+  cursor: pointer;
+}
+
+.day-label-selected {
+  color: var(--text-primary);
+}
+
+.day-label-selected::after {
+  content: '';
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: -0.35rem;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
 }
 
 .grid-body {
