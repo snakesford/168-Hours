@@ -289,27 +289,42 @@
     persistSelectedWeek();
   }
 
-  function ensureWeekExists(weekId, seedState, seedHistory) {
+  function createEmptyHistory() {
+    return typeof window.XJ === 'function' ? window.XJ() : { past: [], future: [] };
+  }
+
+  function buildNewWeekState() {
+    return applyRecurringRowsToState(buildBlankStateFromCurrent());
+  }
+
+  function ensureWeekExists(weekId, seedState, seedHistory, options) {
     if (store.weeks[weekId]) return;
+    var config = options && typeof options === 'object' ? options : {};
     var nextState = seedState ? safeStateClone(seedState) : buildBlankStateFromCurrent();
-    if (!seedState && isFutureWeek(weekId)) {
+    if (!seedState && (config.applyRecurringRows || isFutureWeek(weekId))) {
       nextState = applyRecurringRowsToState(nextState);
     }
     store.weeks[weekId] = {
       weekId: weekId,
       savedAt: new Date().toISOString(),
       state: nextState,
-      history: seedHistory ? safeHistoryClone(seedHistory) : (typeof window.XJ === 'function' ? window.XJ() : { past: [], future: [] })
+      history: seedHistory ? safeHistoryClone(seedHistory) : createEmptyHistory()
     };
     saveStore(store);
   }
 
   function openAdjacentWeek(delta) {
+    syncRecurringRowsFromCurrentState();
     var targetWeekId = shiftWeekId(selectedWeekId, delta);
+    var createdNewWeek = false;
     if (!store.weeks[targetWeekId] && delta > 0) {
-      ensureWeekExists(targetWeekId, applyRecurringRowsToState(buildBlankStateFromCurrent()), typeof window.XJ === 'function' ? window.XJ() : { past: [], future: [] });
+      ensureWeekExists(targetWeekId, buildNewWeekState(), createEmptyHistory(), { applyRecurringRows: true });
+      createdNewWeek = true;
     }
     applyWeek(targetWeekId);
+    if (createdNewWeek) {
+      applyRecurringRowsToCurrentWeek();
+    }
   }
 
   function applyWeek(weekId) {
@@ -330,6 +345,18 @@
     originalL.call(window);
 
     isApplyingWeek = false;
+    renderWeekUI();
+  }
+
+  function applyRecurringRowsToCurrentWeek() {
+    var nextState = applyRecurringRowsToState(window.Y);
+    window.Y = nextState;
+    window.N = createEmptyHistory();
+    window.M();
+    window.G();
+    window.f();
+    originalL.call(window);
+    saveCurrentWeek();
     renderWeekUI();
   }
 
@@ -575,6 +602,26 @@
     renderRecurringButtons();
   }
 
+  function removeRecurringRow(rowIndex) {
+    var hourKey = getRowHourKey(rowIndex);
+    if (!Number.isInteger(hourKey) || !recurringRows[String(hourKey)]) return;
+
+    delete recurringRows[String(hourKey)];
+    saveRecurringRows();
+    renderRecurringButtons();
+  }
+
+  function syncRecurringRowsFromCurrentState() {
+    var labels = Array.from(document.querySelectorAll('#hour-labels .hour-label'));
+    if (!labels.length) return;
+
+    labels.forEach(function (_, rowIndex) {
+      var hourKey = getRowHourKey(rowIndex);
+      if (!Number.isInteger(hourKey) || !recurringRows[String(hourKey)]) return;
+      captureRecurringRow(rowIndex);
+    });
+  }
+
   function renderRecurringButtons() {
     var labels = Array.from(document.querySelectorAll('#hour-labels .hour-label'));
     if (!labels.length) return;
@@ -598,7 +645,7 @@
         button = document.createElement('button');
         button.type = 'button';
         button.className = 'hour-recurring-btn';
-        button.textContent = 'Recurring';
+        button.innerHTML = '<span class="hour-recurring-checkbox" aria-hidden="true"><span class="hour-recurring-checkbox-mark">\u2713</span></span><span class="hour-recurring-text">recurring</span>';
         label.appendChild(button);
       }
 
@@ -606,55 +653,90 @@
       var hourKey = getRowHourKey(rowIndex);
       var isActive = Number.isInteger(hourKey) && Boolean(recurringRows[String(hourKey)]);
       button.classList.toggle('active', isActive);
-      button.title = isActive ? 'Recurring row saved for future weeks' : 'Save this row for future new weeks';
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      button.title = isActive ? 'Remove recurring row for future weeks' : 'Save this row for future new weeks';
     });
   }
 
   function buildUI() {
     var headerActions = document.querySelector('.header-actions');
     var navTitle = document.querySelector('.nav-title');
-    var logo = document.querySelector('.logo');
     if (!headerActions) return;
     if (document.getElementById('week-schedules-bar')) return;
 
-    if ((logo || navTitle) && !document.getElementById('live-status')) {
+    if (navTitle && !document.getElementById('live-status')) {
       var liveStatus = document.createElement('span');
       liveStatus.className = 'live-status';
       liveStatus.id = 'live-status';
-      if (logo) {
-        logo.insertAdjacentElement('afterend', liveStatus);
-      } else {
-        navTitle.insertAdjacentElement('afterend', liveStatus);
-      }
+      navTitle.insertAdjacentElement('afterend', liveStatus);
     }
 
     var bar = document.createElement('section');
     bar.className = 'week-schedules-bar';
     bar.id = 'week-schedules-bar';
-    bar.innerHTML = [
-      '<div class="week-schedules-main">',
-      '  <div class="week-schedules-nav">',
-      '    <button id="week-prev-btn" type="button" class="btn week-nav-btn" aria-label="Previous week">Prev</button>',
-      '    <div class="week-current-wrap">',
-      '      <button id="week-current-btn" type="button" class="week-current-btn" aria-haspopup="dialog" aria-expanded="false"></button>',
-      '      <div id="week-picker-popover" class="week-picker-popover" hidden>',
-      '        <div class="week-picker-head">Saved weeks</div>',
-      '        <div id="week-schedule-list" class="week-schedule-list"></div>',
-      '      </div>',
-      '    </div>',
-      '    <button id="week-next-btn" type="button" class="btn week-nav-btn" aria-label="Next week">Next</button>',
-      '  </div>',
-      '</div>',
-      '<button id="save-week-btn" type="button" class="btn btn-secondary week-save-btn">Save Week</button>'
-    ].join('');
-    headerActions.insertBefore(bar, headerActions.firstChild);
 
-    var saveButton = document.getElementById('save-week-btn');
-    var prevButton = document.getElementById('week-prev-btn');
-    var nextButton = document.getElementById('week-next-btn');
-    var currentButton = document.getElementById('week-current-btn');
-    var list = document.getElementById('week-schedule-list');
-    var popover = document.getElementById('week-picker-popover');
+    var main = document.createElement('div');
+    main.className = 'week-schedules-main';
+
+    var nav = document.createElement('div');
+    nav.className = 'week-schedules-nav';
+
+    var prevButton = document.createElement('button');
+    prevButton.id = 'week-prev-btn';
+    prevButton.type = 'button';
+    prevButton.className = 'btn week-nav-btn';
+    prevButton.setAttribute('aria-label', 'Previous week');
+    prevButton.textContent = 'Prev';
+
+    var currentWrap = document.createElement('div');
+    currentWrap.className = 'week-current-wrap';
+
+    var currentButton = document.createElement('button');
+    currentButton.id = 'week-current-btn';
+    currentButton.type = 'button';
+    currentButton.className = 'week-current-btn';
+    currentButton.setAttribute('aria-haspopup', 'dialog');
+    currentButton.setAttribute('aria-expanded', 'false');
+
+    var popover = document.createElement('div');
+    popover.id = 'week-picker-popover';
+    popover.className = 'week-picker-popover';
+    popover.hidden = true;
+
+    var popoverHead = document.createElement('div');
+    popoverHead.className = 'week-picker-head';
+    popoverHead.textContent = 'Saved weeks';
+
+    var list = document.createElement('div');
+    list.id = 'week-schedule-list';
+    list.className = 'week-schedule-list';
+
+    popover.appendChild(popoverHead);
+    popover.appendChild(list);
+    currentWrap.appendChild(currentButton);
+    currentWrap.appendChild(popover);
+
+    var nextButton = document.createElement('button');
+    nextButton.id = 'week-next-btn';
+    nextButton.type = 'button';
+    nextButton.className = 'btn week-nav-btn';
+    nextButton.setAttribute('aria-label', 'Next week');
+    nextButton.textContent = 'Next';
+
+    nav.appendChild(prevButton);
+    nav.appendChild(currentWrap);
+    nav.appendChild(nextButton);
+    main.appendChild(nav);
+
+    var saveButton = document.createElement('button');
+    saveButton.id = 'save-week-btn';
+    saveButton.type = 'button';
+    saveButton.className = 'btn btn-secondary week-save-btn';
+    saveButton.textContent = 'Save Week';
+
+    bar.appendChild(main);
+    bar.appendChild(saveButton);
+    headerActions.insertBefore(bar, headerActions.firstChild);
 
     if (saveButton) {
       saveButton.addEventListener('click', function () {
@@ -707,6 +789,10 @@
       event.preventDefault();
       var rowIndex = Number(recurringButton.getAttribute('data-row-index'));
       if (!Number.isInteger(rowIndex) || rowIndex < 0 || rowIndex > 23) return;
+      if (recurringButton.classList.contains('active')) {
+        removeRecurringRow(rowIndex);
+        return;
+      }
       captureRecurringRow(rowIndex);
     });
 
@@ -724,39 +810,73 @@
     });
   }
 
+  function replaceChildren(node, children) {
+    while (node.firstChild) {
+      node.removeChild(node.firstChild);
+    }
+    children.forEach(function (child) {
+      node.appendChild(child);
+    });
+  }
+
+  function buildTextSpan(className, text) {
+    var span = document.createElement('span');
+    span.className = className;
+    span.textContent = text;
+    return span;
+  }
+
+  function buildWeekScheduleEntry(weekId, isActive) {
+    var entry = store.weeks[weekId];
+    var hours = countAssignedHours(entry ? entry.state : null);
+    var label = relativeWeekLabel(weekId);
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'week-schedule-entry' + (isActive ? ' active' : '');
+
+    var itemButton = document.createElement('button');
+    itemButton.type = 'button';
+    itemButton.className = 'week-schedule-item' + (isActive ? ' active' : '');
+    itemButton.setAttribute('data-week-id', weekId);
+
+    itemButton.appendChild(buildTextSpan('week-schedule-main', describeWeek(weekId)));
+    itemButton.appendChild(buildTextSpan('week-schedule-meta', (label || weekId) + ' · starts ' + weekId));
+    itemButton.appendChild(buildTextSpan('week-schedule-meta', hours + 'h planned'));
+
+    var deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'week-schedule-delete';
+    deleteButton.setAttribute('data-delete-week-id', weekId);
+    deleteButton.setAttribute('aria-label', 'Delete saved week ' + weekId);
+    deleteButton.textContent = 'Delete';
+
+    wrapper.appendChild(itemButton);
+    wrapper.appendChild(deleteButton);
+    return wrapper;
+  }
+
   function renderWeekUI() {
     var currentButton = document.getElementById('week-current-btn');
     var list = document.getElementById('week-schedule-list');
     if (!currentButton || !list) return;
 
     var relative = relativeWeekLabel(selectedWeekId);
-    currentButton.innerHTML = [
-      '<span class="week-current-main">' + describeWeek(selectedWeekId) + '</span>',
-      '<span class="week-current-sub">' + (relative || selectedWeekId) + ' · ' + selectedWeekId + '</span>'
-    ].join('');
+    replaceChildren(currentButton, [
+      buildTextSpan('week-current-main', describeWeek(selectedWeekId)),
+      buildTextSpan('week-current-sub', (relative || selectedWeekId) + ' · ' + selectedWeekId)
+    ]);
 
     var ids = visibleWeekIds();
-    list.innerHTML = ids.map(function (weekId) {
-      var entry = store.weeks[weekId];
-      var hours = countAssignedHours(entry ? entry.state : null);
-      var label = relativeWeekLabel(weekId);
-      return [
-        '<div class="week-schedule-entry' + (weekId === selectedWeekId ? ' active' : '') + '">',
-        '  <button type="button" class="week-schedule-item' + (weekId === selectedWeekId ? ' active' : '') + '" data-week-id="' + weekId + '">',
-        '    <span class="week-schedule-main">' + describeWeek(weekId) + '</span>',
-        '    <span class="week-schedule-meta">' + (label || weekId) + ' · starts ' + weekId + '</span>',
-        '    <span class="week-schedule-meta">' + hours + 'h planned</span>',
-        '  </button>',
-        '  <button type="button" class="week-schedule-delete" data-delete-week-id="' + weekId + '" aria-label="Delete saved week ' + weekId + '">Delete</button>',
-        '</div>'
-      ].join('');
-    }).join('');
+    replaceChildren(list, ids.map(function (weekId) {
+      return buildWeekScheduleEntry(weekId, weekId === selectedWeekId);
+    }));
     renderWeekStatus();
   }
 
   window.L = function () {
     var result = originalL.apply(this, arguments);
     if (!isApplyingWeek) {
+      syncRecurringRowsFromCurrentState();
       flushCurrentWeek();
       renderWeekUI();
     }
@@ -767,6 +887,7 @@
   window.OJ = function (state) {
     var result = originalOJ ? originalOJ.call(this, state) : undefined;
     if (!isApplyingWeek) {
+      syncRecurringRowsFromCurrentState();
       flushCurrentWeek();
       renderWeekUI();
     }
