@@ -258,7 +258,9 @@
         if (!Number.isInteger(index) || index < 0 || index >= 168) return;
         if (!Number.isInteger(cellChunks) || cellChunks < 1) cellChunks = 1;
 
-        var chunks = Array.isArray(cell.gridChunks) ? cell.gridChunks.slice(0, cellChunks) : [cell.grid || 'unassigned'];
+        var chunks = cellChunks === 1
+          ? [cell.grid || 'unassigned']
+          : (Array.isArray(cell.gridChunks) ? cell.gridChunks.slice(0, cellChunks) : [cell.grid || 'unassigned']);
         while (chunks.length < cellChunks) chunks.push(cell.grid || 'unassigned');
         chunks = chunks.map(function (categoryId) {
           return validCategoryIds.has(categoryId) ? categoryId : 'unassigned';
@@ -271,6 +273,48 @@
     });
 
     return next;
+  }
+
+  function clearRecurringHourFromState(state, hourKey) {
+    var next = safeStateClone(state);
+    if (!Number.isInteger(hourKey) || hourKey < 0 || hourKey > 23) return next;
+
+    for (var index = hourKey; index < 168; index += 24) {
+      next.cellChunks[index] = 1;
+      next.grid[index] = 'unassigned';
+      next.gridChunks[index] = ['unassigned'];
+    }
+
+    return next;
+  }
+
+  function syncFutureWeeksWithRecurringRows(removedHourKeys) {
+    var didChange = false;
+    var clearedHours = Array.isArray(removedHourKeys) ? removedHourKeys : [];
+
+    Object.keys(store.weeks).forEach(function (weekId) {
+      if (!isFutureWeek(weekId)) return;
+
+      var entry = store.weeks[weekId];
+      if (!entry || !entry.state) return;
+
+      var nextState = safeStateClone(entry.state);
+      clearedHours.forEach(function (hourKey) {
+        nextState = clearRecurringHourFromState(nextState, hourKey);
+      });
+      entry.state = applyRecurringRowsToState(nextState);
+      entry.savedAt = new Date().toISOString();
+      didChange = true;
+
+      if (weekId === selectedWeekId) {
+        window.Y = safeStateClone(entry.state);
+        window.N = safeHistoryClone(entry.history);
+      }
+    });
+
+    if (didChange) {
+      saveStore(store);
+    }
   }
 
   function saveCurrentWeek() {
@@ -314,7 +358,9 @@
   }
 
   function openAdjacentWeek(delta) {
-    syncRecurringRowsFromCurrentState();
+    if (!isFutureWeek(selectedWeekId)) {
+      syncRecurringRowsFromCurrentState();
+    }
     var targetWeekId = shiftWeekId(selectedWeekId, delta);
     var createdNewWeek = false;
     if (!store.weeks[targetWeekId] && delta > 0) {
@@ -331,6 +377,13 @@
     ensureWeekExists(weekId);
     var entry = store.weeks[weekId];
     if (!entry) return;
+
+    if (isFutureWeek(weekId)) {
+      var nextState = applyRecurringRowsToState(entry.state);
+      entry.state = nextState;
+      entry.savedAt = new Date().toISOString();
+      saveStore(store);
+    }
 
     isApplyingWeek = true;
     selectedWeekId = weekId;
@@ -582,11 +635,14 @@
         var index = Number(cell.dataset.index);
         if (!Number.isInteger(index) || index < 0 || index >= 168) return null;
         var cellChunks = (window.Y.cellChunks && window.Y.cellChunks[index]) || 1;
-        var gridChunks = (window.Y.gridChunks && window.Y.gridChunks[index]) || [window.Y.grid[index] || 'unassigned'];
+        var gridValue = (window.Y.grid && window.Y.grid[index]) || 'unassigned';
+        var gridChunks = cellChunks === 1
+          ? [gridValue]
+          : ((window.Y.gridChunks && window.Y.gridChunks[index]) || [gridValue]);
         return {
           index: index,
           cellChunks: cellChunks,
-          grid: (window.Y.grid && window.Y.grid[index]) || 'unassigned',
+          grid: gridValue,
           gridChunks: Array.isArray(gridChunks) ? gridChunks.slice() : [gridChunks || 'unassigned']
         };
       })
@@ -599,6 +655,7 @@
       cells: cells
     };
     saveRecurringRows();
+    syncFutureWeeksWithRecurringRows([]);
     renderRecurringButtons();
   }
 
@@ -608,6 +665,7 @@
 
     delete recurringRows[String(hourKey)];
     saveRecurringRows();
+    syncFutureWeeksWithRecurringRows([hourKey]);
     renderRecurringButtons();
   }
 
@@ -876,7 +934,9 @@
   window.L = function () {
     var result = originalL.apply(this, arguments);
     if (!isApplyingWeek) {
-      syncRecurringRowsFromCurrentState();
+      if (!isFutureWeek(selectedWeekId)) {
+        syncRecurringRowsFromCurrentState();
+      }
       flushCurrentWeek();
       renderWeekUI();
     }
@@ -887,7 +947,9 @@
   window.OJ = function (state) {
     var result = originalOJ ? originalOJ.call(this, state) : undefined;
     if (!isApplyingWeek) {
-      syncRecurringRowsFromCurrentState();
+      if (!isFutureWeek(selectedWeekId)) {
+        syncRecurringRowsFromCurrentState();
+      }
       flushCurrentWeek();
       renderWeekUI();
     }
