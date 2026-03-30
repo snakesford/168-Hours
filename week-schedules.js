@@ -275,48 +275,6 @@
     return next;
   }
 
-  function clearRecurringHourFromState(state, hourKey) {
-    var next = safeStateClone(state);
-    if (!Number.isInteger(hourKey) || hourKey < 0 || hourKey > 23) return next;
-
-    for (var index = hourKey; index < 168; index += 24) {
-      next.cellChunks[index] = 1;
-      next.grid[index] = 'unassigned';
-      next.gridChunks[index] = ['unassigned'];
-    }
-
-    return next;
-  }
-
-  function syncFutureWeeksWithRecurringRows(removedHourKeys) {
-    var didChange = false;
-    var clearedHours = Array.isArray(removedHourKeys) ? removedHourKeys : [];
-
-    Object.keys(store.weeks).forEach(function (weekId) {
-      if (!isFutureWeek(weekId)) return;
-
-      var entry = store.weeks[weekId];
-      if (!entry || !entry.state) return;
-
-      var nextState = safeStateClone(entry.state);
-      clearedHours.forEach(function (hourKey) {
-        nextState = clearRecurringHourFromState(nextState, hourKey);
-      });
-      entry.state = applyRecurringRowsToState(nextState);
-      entry.savedAt = new Date().toISOString();
-      didChange = true;
-
-      if (weekId === selectedWeekId) {
-        window.Y = safeStateClone(entry.state);
-        window.N = safeHistoryClone(entry.history);
-      }
-    });
-
-    if (didChange) {
-      saveStore(store);
-    }
-  }
-
   function saveCurrentWeek() {
     if (!selectedWeekId) return;
     store.weeks[selectedWeekId] = {
@@ -368,22 +326,12 @@
       createdNewWeek = true;
     }
     applyWeek(targetWeekId);
-    if (createdNewWeek) {
-      applyRecurringRowsToCurrentWeek();
-    }
   }
 
   function applyWeek(weekId) {
     ensureWeekExists(weekId);
     var entry = store.weeks[weekId];
     if (!entry) return;
-
-    if (isFutureWeek(weekId)) {
-      var nextState = applyRecurringRowsToState(entry.state);
-      entry.state = nextState;
-      entry.savedAt = new Date().toISOString();
-      saveStore(store);
-    }
 
     isApplyingWeek = true;
     selectedWeekId = weekId;
@@ -398,18 +346,6 @@
     originalL.call(window);
 
     isApplyingWeek = false;
-    renderWeekUI();
-  }
-
-  function applyRecurringRowsToCurrentWeek() {
-    var nextState = applyRecurringRowsToState(window.Y);
-    window.Y = nextState;
-    window.N = createEmptyHistory();
-    window.M();
-    window.G();
-    window.f();
-    originalL.call(window);
-    saveCurrentWeek();
     renderWeekUI();
   }
 
@@ -655,7 +591,6 @@
       cells: cells
     };
     saveRecurringRows();
-    syncFutureWeeksWithRecurringRows([]);
     renderRecurringButtons();
   }
 
@@ -665,7 +600,6 @@
 
     delete recurringRows[String(hourKey)];
     saveRecurringRows();
-    syncFutureWeeksWithRecurringRows([hourKey]);
     renderRecurringButtons();
   }
 
